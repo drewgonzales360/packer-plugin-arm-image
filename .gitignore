@@ -1,4 +1,3 @@
-.vagrant/
 *.img
 *.log
 packer-builder-arm-image
