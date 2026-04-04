@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -20,7 +19,6 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/template/config"
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
 	"github.com/mitchellh/mapstructure"
-	"github.com/solo-io/packer-plugin-arm-image/pkg/builder/embed"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image/arch"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image/utils"
@@ -200,39 +198,8 @@ func (b *Builder) Prepare(cfgs ...interface{}) ([]string, []string, error) {
 	// convert to full path
 	path, err := exec.LookPath(b.config.QemuBinary)
 	if err != nil {
-		// not found in path, check if if we have it embedded
-		if b.config.DisableEmbedded {
-			errs = packer.MultiErrorAppend(errs, fmt.Errorf("qemu binary not found."))
-		} else {
-			// try to fetch an embedded version
-			embeddedQ, err := embed.GetEmbededQemu(b.config.QemuBinary)
-			if err != nil {
-				errs = packer.MultiErrorAppend(errs, fmt.Errorf("embedded qemu is not available - %w", err))
-			} else {
-				defer embeddedQ.Close()
-				qemupathincache, err := packer.CachePath(b.config.QemuBinary)
-				if err != nil {
-					errs = packer.MultiErrorAppend(errs, fmt.Errorf("cannot cache qemu - %w", err))
-				} else if _, err := os.Stat(qemupathincache); os.IsNotExist(err) {
-					// copy to cache folder, make executable, and use as path.
-					// also check if it exists before copying.
-					cachedFile, err := os.OpenFile(qemupathincache, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-					if err != nil {
-						errs = packer.MultiErrorAppend(errs, fmt.Errorf("cannot cache - %w", err))
-					} else {
-						defer cachedFile.Close()
-						io.Copy(cachedFile, embeddedQ)
-						b.config.QemuBinary = qemupathincache
-					}
-				} else if err == nil {
-					b.config.QemuBinary = qemupathincache
-				} else {
-					errs = packer.MultiErrorAppend(errs, fmt.Errorf("unknown cache error - %w", err))
-				}
-			}
-		}
+		errs = packer.MultiErrorAppend(errs, fmt.Errorf("qemu binary %q not found in PATH: install qemu-user-static (e.g. apt install qemu-user-static)", b.config.QemuBinary))
 	} else {
-		// found it in the path, set the config to it!
 		if !strings.Contains(path, "qemu-") {
 			warnings = append(warnings, "binary doesn't look like qemu-user")
 		}

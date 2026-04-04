@@ -70,11 +70,8 @@ type Config struct {
 	TargetImageSize uint64 `mapstructure:"target_image_size"`
 
 	// Qemu binary to use. default is determined based on `image_arch`.
-	// If this is an absolute path, it will be used. Otherwise, we will look for one in your PATH
-	// and finally, try to auto fetch one from https://github.com/multiarch/qemu-user-static/
+	// Must be installed on the host (e.g. via apt install qemu-user-static).
 	QemuBinary string `mapstructure:"qemu_binary"`
-	// Do not use embedded qemu.
-	DisableEmbedded bool `mapstructure:"disable_embedded"`
 	// Arguments to qemu binary. default depends on the image type. see init() function above.
 	QemuArgs []string `mapstructure:"qemu_args"`
 	// Use qemu even when the build machine's CPU architecture matches the image's CPU architecture.
