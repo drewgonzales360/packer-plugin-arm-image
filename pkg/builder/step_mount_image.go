@@ -68,6 +68,13 @@ func (s *stepMountImage) Run(ctx context.Context, state multistep.StateBag) mult
 
 		mntpnt := filepath.Join(s.MountPath, mntAndPart.mnt)
 
+		// Ensure the mount point directory exists inside the (already mounted) root.
+		// For example, /boot/firmware won't exist until root (/) is mounted first.
+		if err := os.MkdirAll(mntpnt, os.ModePerm); err != nil {
+			ui.Error(fmt.Sprintf("error creating mount point %s: %v", mntpnt, err))
+			return multistep.ActionHalt
+		}
+
 		ui.Message(fmt.Sprintf("Mounting: %s", mntAndPart.part))
 
 		err := run(ctx, state, fmt.Sprintf(
