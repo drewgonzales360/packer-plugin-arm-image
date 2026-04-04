@@ -9,7 +9,7 @@ check-generated:
 GORELEASER=go run github.com/goreleaser/goreleaser@v0.182.1
 
 build:
-	go generate ./...
+	-go generate ./...
 	go build -o ${BINARY} .
 
 test:
@@ -21,9 +21,7 @@ ci-release-docs:
 	/bin/sh -c "[ -d docs ] && zip -r docs.zip docs/"
 
 install-local: build
-	go build -o ${BINARY} .
-	mkdir -p $(HOME)/.packer.d/plugins
-	mv ${BINARY} $(HOME)/.packer.d/plugins/
+	sudo packer plugins install --path ${BINARY} github.com/drewgonzales360/arm-image
 
 packer:
 	which packer || go install github.com/hashicorp/packer@v1.8.0
@@ -36,7 +34,7 @@ testacc-sudo:
 	go test -c . && \
 	PACKER_ACC=1 PACKER_CONFIG_DIR=$(HOME) sudo -E bash -c "PATH=$(HOME)/go/bin:$$PATH ./builder.test" && \
 	rm img.delete builder.test
- 
+
 plugin-check: build
 	go run github.com/hashicorp/packer-plugin-sdk/cmd/packer-sdc plugin-check ${BINARY}
 

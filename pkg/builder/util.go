@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/packer"
 )
 
-func run(ctx context.Context, state multistep.StateBag, cmds string) error {
+func run(_ context.Context, state multistep.StateBag, cmds string) error {
 	wrappedCommand := state.Get("wrappedCommand").(packer_common_common.CommandWrapper)
 	ui := state.Get("ui").(packer.Ui)
 

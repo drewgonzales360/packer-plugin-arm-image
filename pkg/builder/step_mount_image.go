@@ -70,8 +70,8 @@ func (s *stepMountImage) Run(ctx context.Context, state multistep.StateBag) mult
 
 		// Ensure the mount point directory exists inside the (already mounted) root.
 		// For example, /boot/firmware won't exist until root (/) is mounted first.
-		if err := os.MkdirAll(mntpnt, os.ModePerm); err != nil {
-			ui.Error(fmt.Sprintf("error creating mount point %s: %v", mntpnt, err))
+		// Use run() so this goes through the command_wrapper (e.g. sudo).
+		if err := run(ctx, state, fmt.Sprintf("mkdir -p %s", mntpnt)); err != nil {
 			return multistep.ActionHalt
 		}
 
