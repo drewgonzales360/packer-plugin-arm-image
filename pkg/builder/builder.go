@@ -205,7 +205,13 @@ func (b *Builder) Prepare(cfgs ...interface{}) ([]string, []string, error) {
 	// Detect whether we need a Podman container for the build environment.
 	// On non-Linux hosts, Linux kernel features (losetup, mount, chroot,
 	// binfmt_misc) are unavailable, so we run them inside a privileged container.
-	b.usePodman = NeedsPodman() || b.config.PodmanImage != ""
+	// On Linux, Podman is not used even if podman_image is set -- native operations
+	// are always preferred.
+	b.usePodman = NeedsPodman()
+
+	if b.config.PodmanImage != "" && !b.usePodman {
+		warnings = append(warnings, "podman_image is set but ignored on Linux where native operations are used")
+	}
 
 	if b.usePodman {
 		if _, err := exec.LookPath("podman"); err != nil {
@@ -291,6 +297,11 @@ func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (pack
 		&stepCopyImage{FromKey: "iso_path", ResultKey: "imagefile", ImageOpener: image.NewImageOpener(ui)},
 	}
 
+	// stepResizeLastPart runs BEFORE Podman because it only does host-level
+	// file I/O (os.Stat, os.Truncate, MBR table editing) on the image file,
+	// which lives on the host filesystem. stepResizeFs runs AFTER Podman
+	// because it needs Linux tools (e2fsck, resize2fs) that are only
+	// available inside the container on non-Linux hosts.
 	if b.config.LastPartitionExtraSize > 0 || b.config.TargetImageSize > 0 {
 		steps = append(steps,
 			&stepResizeLastPart{FromKey: "imagefile"},
@@ -333,7 +344,7 @@ func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (pack
 	if !b.config.ImageArch.IsNative() || b.config.QemuRequired {
 		steps = append(steps,
 			&stepQemuUserStatic{ChrootKey: ChrootKey, PathToQemuInChrootKey: "qemuInChroot", Args: Args{Args: b.config.QemuArgs}},
-			&stepRegisterBinFmt{QemuPathKey: "qemuInChroot"},
+			&stepRegisterBinFmt{QemuPathKey: "qemuInChroot", BinfmtName: "binfmt_name"},
 		)
 	}
 

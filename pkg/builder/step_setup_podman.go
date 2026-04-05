@@ -56,7 +56,11 @@ func (s *stepSetupPodman) Run(ctx context.Context, state multistep.StateBag) mul
 
 	// Mount temp directories so Packer SDK file uploads work inside the container.
 	for _, d := range []string{"/tmp", tmpDir} {
-		abs, _ := filepath.Abs(d)
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			ui.Error(fmt.Sprintf("Warning: failed to resolve absolute path for %s: %s", d, err))
+			continue
+		}
 		if abs != "" && !seen[abs] && !strings.HasPrefix(abs, imageDir) {
 			volumes = append(volumes, abs+":"+abs)
 			seen[abs] = true
@@ -76,8 +80,14 @@ func (s *stepSetupPodman) Run(ctx context.Context, state multistep.StateBag) mul
 
 	// Detach any stale loop devices from previous failed runs, then ensure
 	// enough loop device nodes exist for our build.
-	s.podman.ExecShell("losetup -D 2>/dev/null || true")
-	s.podman.ExecShell("for i in $(seq 0 7); do [ -e /dev/loop$i ] || mknod /dev/loop$i b 7 $i; done")
+	if out, err := s.podman.ExecShell("losetup -D 2>/dev/null || true"); err != nil {
+		ui.Say(fmt.Sprintf("Warning: losetup -D failed (may be harmless): %s %s", err, string(out)))
+	}
+	if out, err := s.podman.ExecShell("for i in $(seq 0 7); do [ -e /dev/loop$i ] || mknod /dev/loop$i b 7 $i; done"); err != nil {
+		ui.Error(fmt.Sprintf("Failed to create loop device nodes: %s %s", err, string(out)))
+		state.Put("error", err)
+		return multistep.ActionHalt
+	}
 
 	// Install required Linux packages inside the container.
 	ui.Say("Installing required packages in container...")

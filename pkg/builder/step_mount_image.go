@@ -3,7 +3,6 @@ package builder
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -52,7 +51,7 @@ func (s *stepMountImage) Run(ctx context.Context, state multistep.StateBag) mult
 				tempParent = filepath.Dir(imagefile.(string))
 			}
 		}
-		tempDir, err := ioutil.TempDir(tempParent, ".armimg-")
+		tempDir, err := os.MkdirTemp(tempParent, ".armimg-")
 		if err != nil {
 			ui.Error(err.Error())
 			return multistep.ActionHalt

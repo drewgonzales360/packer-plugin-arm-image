@@ -57,7 +57,13 @@ func (s *stepMapImage) Run(_ context.Context, state multistep.StateBag) multiste
 		return multistep.ActionHalt
 	}
 	loopDev := strings.TrimSpace(string(out))
-	loop := strings.Split(loopDev, "/")[2] // e.g. "loop0"
+	parts := strings.Split(loopDev, "/")
+	if len(parts) < 3 {
+		ui.Error(fmt.Sprintf("unexpected losetup output: %q", loopDev))
+		s.Cleanup(state)
+		return multistep.ActionHalt
+	}
+	loop := parts[2] // e.g. "loop0"
 	state.Put("loop_device", loopDev)
 
 	var partitions []string
@@ -158,6 +164,7 @@ func (s *stepMapImage) findPartitionsNative(prefix string, ui packer.Ui) ([]stri
 					cPartitions <- found
 					return
 				}
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}()

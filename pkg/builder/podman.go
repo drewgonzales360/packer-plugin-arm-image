@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"math/rand"
 	"runtime"
 	"strings"
 
@@ -38,7 +40,7 @@ type PodmanEnvironment struct {
 }
 
 // NewPodmanEnvironment creates a new PodmanEnvironment. If image is empty,
-// defaults to ubuntu:24.04.
+// defaults to ubuntu:26.04.
 func NewPodmanEnvironment(image string, volumes []string) *PodmanEnvironment {
 	if image == "" {
 		image = defaultPodmanImage
@@ -93,7 +95,7 @@ func (p *PodmanEnvironment) Start(ctx context.Context) error {
 	}
 
 	s := specgen.NewSpecGenerator(p.Image, false)
-	s.Name = "packer-arm-image-builder"
+	s.Name = fmt.Sprintf("packer-arm-image-builder-%d", rand.Uint32())
 	privileged := true
 	s.Privileged = &privileged
 	s.Command = []string{"sleep", "infinity"}
@@ -152,7 +154,8 @@ func (p *PodmanEnvironment) Exec(args ...string) ([]byte, error) {
 	// Check exit code
 	inspect, err := containers.ExecInspect(p.conn, sessionID, nil)
 	if err != nil {
-		return buf.Bytes(), nil // Can't check exit code, assume success
+		log.Printf("[WARN] ExecInspect failed, cannot verify exit code: %v", err)
+		return buf.Bytes(), fmt.Errorf("exec inspect failed (command may have failed): %w", err)
 	}
 	if inspect.ExitCode != 0 {
 		return buf.Bytes(), fmt.Errorf("command exited with code %d: %s", inspect.ExitCode, buf.String())
@@ -194,8 +197,8 @@ func (p *PodmanEnvironment) InstallPackages(packages []string) error {
 	}
 
 	cmds := []string{
-		"apt-get update -qq",
-		fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get install -y -qq %s", strings.Join(packages, " ")),
+		"timeout 300 apt-get update -qq",
+		fmt.Sprintf("timeout 600 env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq %s", strings.Join(packages, " ")),
 	}
 	for _, cmd := range cmds {
 		if out, err := p.ExecShell(cmd); err != nil {
@@ -210,7 +213,9 @@ func (p *PodmanEnvironment) Stop() error {
 	if p.ContainerID == "" || p.conn == nil {
 		return nil
 	}
-	containers.Stop(p.conn, p.ContainerID, nil)
+	if err := containers.Stop(p.conn, p.ContainerID, nil); err != nil {
+		log.Printf("[WARN] failed to stop container %s: %v", p.ContainerID[:12], err)
+	}
 	_, err := containers.Remove(p.conn, p.ContainerID, new(containers.RemoveOptions).WithForce(true))
 	if err != nil {
 		return fmt.Errorf("failed to remove container: %w", err)
