@@ -40,6 +40,7 @@ type FlatConfig struct {
 	QemuBinary             *string               `mapstructure:"qemu_binary" cty:"qemu_binary" hcl:"qemu_binary"`
 	QemuArgs               []string              `mapstructure:"qemu_args" cty:"qemu_args" hcl:"qemu_args"`
 	QemuRequired           *bool                 `mapstructure:"qemu_required" cty:"qemu_required" hcl:"qemu_required"`
+	PodmanImage            *string               `mapstructure:"podman_image" cty:"podman_image" hcl:"podman_image"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -82,6 +83,7 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"qemu_binary":                &hcldec.AttrSpec{Name: "qemu_binary", Type: cty.String, Required: false},
 		"qemu_args":                  &hcldec.AttrSpec{Name: "qemu_args", Type: cty.List(cty.String), Required: false},
 		"qemu_required":              &hcldec.AttrSpec{Name: "qemu_required", Type: cty.Bool, Required: false},
+		"podman_image":               &hcldec.AttrSpec{Name: "podman_image", Type: cty.String, Required: false},
 	}
 	return s
 }

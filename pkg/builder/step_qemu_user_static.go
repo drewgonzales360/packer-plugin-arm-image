@@ -128,6 +128,17 @@ func (s *stepQemuUserStatic) makeWrapper(ctx context.Context, ui packer.Ui, stat
 }
 
 func (s *stepQemuUserStatic) Cleanup(state multistep.StateBag) {
+	if podman := getPodmanEnv(state); podman != nil {
+		// Files are inside the container's mount namespace, not on the host.
+		if s.qemuDestinationInChroot != "" {
+			podman.Exec("rm", "-f", s.qemuDestinationInChroot)
+		}
+		if s.destWrapper != "" {
+			podman.Exec("rm", "-f", s.destWrapper)
+		}
+		return
+	}
+
 	if s.qemuDestinationInChroot != "" {
 		os.Remove(s.qemuDestinationInChroot)
 	}

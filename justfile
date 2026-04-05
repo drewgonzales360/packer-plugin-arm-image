@@ -1,13 +1,18 @@
 binary := "packer-plugin-arm-image"
-goreleaser := "go run github.com/goreleaser/goreleaser@v0.182.1"
+goreleaser := "go tool goreleaser"
 
 # Build the plugin binary using goreleaser (single target, current platform)
 build:
-    goreleaser build --snapshot --single-target --clean --output {{binary}}
+    go build -o {{binary}} .
+
+# Build the plugin binary using goreleaser (single target, current platform)
+build-release:
+    API_VERSION="$(go run . describe 2>/dev/null | jq -r .api_version)" \
+        {{goreleaser}} build --snapshot --single-target --clean --output {{binary}}
 
 # Install the plugin locally via packer plugins install
 install-local: build
-    sudo packer plugins install --path {{binary}} github.com/drewgonzales360/arm-image
+    packer plugins install --path {{binary}} github.com/drewgonzales360/arm-image
 
 # Run unit tests
 test count="1":
@@ -41,7 +46,7 @@ plugin-check: build
 # Create a local snapshot release (no publish)
 release-snapshot: check-generated
     API_VERSION="$(go run . describe 2>/dev/null | jq -r .api_version)" \
-        {{goreleaser}} release --snapshot --rm-dist --skip-publish
+        {{goreleaser}} release --snapshot --clean --skip=publish
 
 # Create a full release
 release: check-generated

@@ -78,5 +78,11 @@ type Config struct {
 	// Defaults to true if non-default `qemu_binary` or `qemu_args` are supplied.
 	QemuRequired bool `mapstructure:"qemu_required"`
 
+	// Container image for the Podman build environment. On non-Linux hosts
+	// (e.g. macOS), a privileged Podman container provides the Linux kernel
+	// features needed for losetup, mount, and chroot. Defaults to "ubuntu:24.04".
+	// Requires: podman machine init --rootful && podman machine start
+	PodmanImage string `mapstructure:"podman_image"`
+
 	ctx interpolate.Context
 }

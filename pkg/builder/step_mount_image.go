@@ -42,7 +42,17 @@ func (s *stepMountImage) Run(ctx context.Context, state multistep.StateBag) mult
 			return multistep.ActionHalt
 		}
 	} else {
-		tempDir, err := ioutil.TempDir("", "armimg-")
+		// When using Podman, create the temp dir under the image directory
+		// so it's inside the shared volume mount. Otherwise use the system
+		// temp dir.
+		tempParent := ""
+		if getPodmanEnv(state) != nil {
+			imagefile, _ := state.GetOk("imagefile")
+			if imagefile != nil {
+				tempParent = filepath.Dir(imagefile.(string))
+			}
+		}
+		tempDir, err := ioutil.TempDir(tempParent, ".armimg-")
 		if err != nil {
 			ui.Error(err.Error())
 			return multistep.ActionHalt
@@ -99,7 +109,8 @@ func (s *stepMountImage) Cleanup(state multistep.StateBag) {
 
 	if s.MountPath != "" {
 		for _, mntpnt := range reverse(s.mountpoints) {
-			run(context.TODO(), state, "umount "+mntpnt)
+			// Use lazy unmount (-l) to handle busy mounts during cleanup.
+			runCleanup(context.TODO(), state, "umount -l "+mntpnt)
 		}
 		s.mountpoints = nil
 		// DO NOT do remove all here! if dev fails to umount it would be undesirable.
