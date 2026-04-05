@@ -24,5 +24,5 @@ func (s *StepMountCleanup) Cleanup(state multistep.StateBag) {
 
 	ui := state.Get("ui").(packer.Ui)
 	ui.Say("fuser -k " + mountPath)
-	run(context.TODO(), state, "fuser -k "+mountPath+" || exit 0")
+	runCleanup(context.TODO(), state, "fuser -k "+mountPath+" || exit 0")
 }

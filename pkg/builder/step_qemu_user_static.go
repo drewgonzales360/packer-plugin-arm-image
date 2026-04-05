@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -94,14 +93,14 @@ func (s *stepQemuUserStatic) makeWrapper(ctx context.Context, ui packer.Ui, stat
 	var buffer bytes.Buffer
 	t.Execute(&buffer, s.Args)
 
-	dir, err := ioutil.TempDir("", "compile")
+	dir, err := os.MkdirTemp("", "compile")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir) // clean up
 
 	tmpfn := filepath.Join(dir, "main.c")
-	if err := ioutil.WriteFile(tmpfn, buffer.Bytes(), 0666); err != nil {
+	if err := os.WriteFile(tmpfn, buffer.Bytes(), 0666); err != nil {
 		return err
 	}
 
@@ -128,6 +127,17 @@ func (s *stepQemuUserStatic) makeWrapper(ctx context.Context, ui packer.Ui, stat
 }
 
 func (s *stepQemuUserStatic) Cleanup(state multistep.StateBag) {
+	if podman := getPodmanEnv(state); podman != nil {
+		// Files are inside the container's mount namespace, not on the host.
+		if s.qemuDestinationInChroot != "" {
+			podman.Exec("rm", "-f", s.qemuDestinationInChroot)
+		}
+		if s.destWrapper != "" {
+			podman.Exec("rm", "-f", s.destWrapper)
+		}
+		return
+	}
+
 	if s.qemuDestinationInChroot != "" {
 		os.Remove(s.qemuDestinationInChroot)
 	}

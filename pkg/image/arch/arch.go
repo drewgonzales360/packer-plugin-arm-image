@@ -35,5 +35,14 @@ func (arch KnownArchType) Valid() bool {
 }
 
 func (arch KnownArchType) IsNative() bool {
-	return string(arch) == runtime.GOARCH
+	if string(arch) == runtime.GOARCH {
+		return true
+	}
+	// ARM64 processors can natively execute ARM (32-bit) binaries via
+	// kernel compat mode. This applies to both native Linux and Podman
+	// containers on ARM64 macOS (Apple Silicon).
+	if runtime.GOARCH == "arm64" && arch == Arm {
+		return true
+	}
+	return false
 }

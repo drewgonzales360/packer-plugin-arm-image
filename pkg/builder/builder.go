@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -20,7 +19,6 @@ import (
 	"github.com/hashicorp/packer-plugin-sdk/template/config"
 	"github.com/hashicorp/packer-plugin-sdk/template/interpolate"
 	"github.com/mitchellh/mapstructure"
-	"github.com/solo-io/packer-plugin-arm-image/pkg/builder/embed"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image/arch"
 	"github.com/solo-io/packer-plugin-arm-image/pkg/image/utils"
@@ -79,8 +77,9 @@ var generatedDataKeys = map[string]string{
 }
 
 type Builder struct {
-	config Config
-	runner *multistep.BasicRunner
+	config    Config
+	runner    *multistep.BasicRunner
+	usePodman bool
 }
 
 func NewBuilder() *Builder {
@@ -124,6 +123,18 @@ func (b *Builder) Prepare(cfgs ...interface{}) ([]string, []string, error) {
 		} else {
 			b.config.OutputFile = fmt.Sprintf("output-%s/image", b.config.PackerConfig.PackerBuildName)
 		}
+	}
+
+	// Resolve OutputFile to an absolute path so that it works correctly
+	// inside Podman containers which have a different working directory.
+	if cwd, err := os.Getwd(); err == nil {
+		log.Printf("[DEBUG] plugin CWD: %s, OutputFile before resolve: %s", cwd, b.config.OutputFile)
+	}
+	if abs, err := filepath.Abs(b.config.OutputFile); err == nil {
+		log.Printf("[DEBUG] OutputFile resolved to: %s", abs)
+		b.config.OutputFile = abs
+	} else {
+		log.Printf("[DEBUG] filepath.Abs failed: %v", err)
 	}
 
 	if b.config.LastPartitionExtraSize > 0 {
@@ -191,52 +202,48 @@ func (b *Builder) Prepare(cfgs ...interface{}) ([]string, []string, error) {
 		b.config.ImageArch = arch.Arm
 	}
 
+	// Detect whether we need a Podman container for the build environment.
+	// On non-Linux hosts, Linux kernel features (losetup, mount, chroot,
+	// binfmt_misc) are unavailable, so we run them inside a privileged container.
+	// On Linux, Podman is not used even if podman_image is set -- native operations
+	// are always preferred.
+	b.usePodman = NeedsPodman()
+
+	if b.config.PodmanImage != "" && !b.usePodman {
+		warnings = append(warnings, "podman_image is set but ignored on Linux where native operations are used")
+	}
+
+	if b.usePodman {
+		if _, err := exec.LookPath("podman"); err != nil {
+			errs = packer.MultiErrorAppend(errs, fmt.Errorf(
+				"podman is required on non-Linux hosts: install podman, then run: podman machine init --rootful && podman machine start"))
+		}
+	}
+
 	if b.config.QemuBinary == "" {
 		b.config.QemuBinary = knownQemu[b.config.ImageArch]
 	} else if b.config.QemuBinary != knownQemu[b.config.ImageArch] {
 		// If the user provided a non-default qemu, make sure we use it
 		b.config.QemuRequired = true
 	}
-	// convert to full path
-	path, err := exec.LookPath(b.config.QemuBinary)
-	if err != nil {
-		// not found in path, check if if we have it embedded
-		if b.config.DisableEmbedded {
-			errs = packer.MultiErrorAppend(errs, fmt.Errorf("qemu binary not found."))
+
+	// Only validate the qemu binary on the host when we'll actually use it.
+	// When using Podman, qemu is installed inside the container instead.
+	// When the image arch is native, qemu is skipped entirely.
+	needsQemu := !b.config.ImageArch.IsNative() || b.config.QemuRequired
+	if needsQemu && !b.usePodman {
+		path, err := exec.LookPath(b.config.QemuBinary)
+		if err != nil {
+			errs = packer.MultiErrorAppend(errs, fmt.Errorf("qemu binary %q not found in PATH: install qemu-user-static (e.g. apt install qemu-user-static)", b.config.QemuBinary))
 		} else {
-			// try to fetch an embedded version
-			embeddedQ, err := embed.GetEmbededQemu(b.config.QemuBinary)
-			if err != nil {
-				errs = packer.MultiErrorAppend(errs, fmt.Errorf("embedded qemu is not available - %w", err))
-			} else {
-				defer embeddedQ.Close()
-				qemupathincache, err := packer.CachePath(b.config.QemuBinary)
-				if err != nil {
-					errs = packer.MultiErrorAppend(errs, fmt.Errorf("cannot cache qemu - %w", err))
-				} else if _, err := os.Stat(qemupathincache); os.IsNotExist(err) {
-					// copy to cache folder, make executable, and use as path.
-					// also check if it exists before copying.
-					cachedFile, err := os.OpenFile(qemupathincache, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-					if err != nil {
-						errs = packer.MultiErrorAppend(errs, fmt.Errorf("cannot cache - %w", err))
-					} else {
-						defer cachedFile.Close()
-						io.Copy(cachedFile, embeddedQ)
-						b.config.QemuBinary = qemupathincache
-					}
-				} else if err == nil {
-					b.config.QemuBinary = qemupathincache
-				} else {
-					errs = packer.MultiErrorAppend(errs, fmt.Errorf("unknown cache error - %w", err))
-				}
+			if !strings.Contains(path, "qemu-") {
+				warnings = append(warnings, "binary doesn't look like qemu-user")
 			}
+			b.config.QemuBinary = path
 		}
-	} else {
-		// found it in the path, set the config to it!
-		if !strings.Contains(path, "qemu-") {
-			warnings = append(warnings, "binary doesn't look like qemu-user")
-		}
-		b.config.QemuBinary = path
+	} else if needsQemu && b.usePodman {
+		// When using Podman, use the standard path inside the container.
+		b.config.QemuBinary = "/usr/bin/" + knownQemu[b.config.ImageArch]
 	}
 
 	log.Println("qemu path", b.config.QemuBinary)
@@ -290,10 +297,21 @@ func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (pack
 		&stepCopyImage{FromKey: "iso_path", ResultKey: "imagefile", ImageOpener: image.NewImageOpener(ui)},
 	}
 
+	// stepResizeLastPart runs BEFORE Podman because it only does host-level
+	// file I/O (os.Stat, os.Truncate, MBR table editing) on the image file,
+	// which lives on the host filesystem. stepResizeFs runs AFTER Podman
+	// because it needs Linux tools (e2fsck, resize2fs) that are only
+	// available inside the container on non-Linux hosts.
 	if b.config.LastPartitionExtraSize > 0 || b.config.TargetImageSize > 0 {
 		steps = append(steps,
 			&stepResizeLastPart{FromKey: "imagefile"},
 		)
+	}
+
+	// On non-Linux hosts, start a Podman container before any Linux-specific
+	// operations. The container provides losetup, mount, chroot, etc.
+	if b.usePodman {
+		steps = append(steps, &stepSetupPodman{})
 	}
 
 	steps = append(steps,
@@ -326,7 +344,7 @@ func (b *Builder) Run(ctx context.Context, ui packer.Ui, hook packer.Hook) (pack
 	if !b.config.ImageArch.IsNative() || b.config.QemuRequired {
 		steps = append(steps,
 			&stepQemuUserStatic{ChrootKey: ChrootKey, PathToQemuInChrootKey: "qemuInChroot", Args: Args{Args: b.config.QemuArgs}},
-			&stepRegisterBinFmt{QemuPathKey: "qemuInChroot"},
+			&stepRegisterBinFmt{QemuPathKey: "qemuInChroot", BinfmtName: "binfmt_name"},
 		)
 	}
 

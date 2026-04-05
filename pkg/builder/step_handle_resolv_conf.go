@@ -25,6 +25,26 @@ func (s *stepHandleResolvConf) Run(ctx context.Context, state multistep.StateBag
 	const origResolvConf = "/etc/resolv.conf"
 	destResolvConf := filepath.Join(mountPath, origResolvConf)
 
+	// When using Podman, the mount is only visible inside the container,
+	// so we must route file operations through podman exec.
+	if podman := getPodmanEnv(state); podman != nil {
+		if s.Delete {
+			if out, err := podman.Exec("rm", "-f", destResolvConf); err != nil {
+				ui.Error(string(out))
+				return multistep.ActionHalt
+			}
+		} else {
+			// Remove any existing symlink (Ubuntu links to systemd-resolved which
+			// doesn't exist in the chroot) then copy the container's resolv.conf in.
+			podman.Exec("rm", "-f", destResolvConf)
+			if out, err := podman.Exec("cp", origResolvConf, destResolvConf); err != nil {
+				ui.Error(string(out))
+				return multistep.ActionHalt
+			}
+		}
+		return multistep.ActionContinue
+	}
+
 	if s.Delete {
 		err := os.Remove(destResolvConf)
 		if err != nil {

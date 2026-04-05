@@ -38,9 +38,9 @@ type FlatConfig struct {
 	LastPartitionExtraSize *uint64               `mapstructure:"last_partition_extra_size" cty:"last_partition_extra_size" hcl:"last_partition_extra_size"`
 	TargetImageSize        *uint64               `mapstructure:"target_image_size" cty:"target_image_size" hcl:"target_image_size"`
 	QemuBinary             *string               `mapstructure:"qemu_binary" cty:"qemu_binary" hcl:"qemu_binary"`
-	DisableEmbedded        *bool                 `mapstructure:"disable_embedded" cty:"disable_embedded" hcl:"disable_embedded"`
 	QemuArgs               []string              `mapstructure:"qemu_args" cty:"qemu_args" hcl:"qemu_args"`
 	QemuRequired           *bool                 `mapstructure:"qemu_required" cty:"qemu_required" hcl:"qemu_required"`
+	PodmanImage            *string               `mapstructure:"podman_image" cty:"podman_image" hcl:"podman_image"`
 }
 
 // FlatMapstructure returns a new FlatConfig.
@@ -81,9 +81,9 @@ func (*FlatConfig) HCL2Spec() map[string]hcldec.Spec {
 		"last_partition_extra_size":  &hcldec.AttrSpec{Name: "last_partition_extra_size", Type: cty.Number, Required: false},
 		"target_image_size":          &hcldec.AttrSpec{Name: "target_image_size", Type: cty.Number, Required: false},
 		"qemu_binary":                &hcldec.AttrSpec{Name: "qemu_binary", Type: cty.String, Required: false},
-		"disable_embedded":           &hcldec.AttrSpec{Name: "disable_embedded", Type: cty.Bool, Required: false},
 		"qemu_args":                  &hcldec.AttrSpec{Name: "qemu_args", Type: cty.List(cty.String), Required: false},
 		"qemu_required":              &hcldec.AttrSpec{Name: "qemu_required", Type: cty.Bool, Required: false},
+		"podman_image":               &hcldec.AttrSpec{Name: "podman_image", Type: cty.String, Required: false},
 	}
 	return s
 }
