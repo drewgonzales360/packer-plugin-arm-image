@@ -1,0 +1,41 @@
+# Builds and publishes plugin assets when a tag matching "v*" is pushed.
+# Requires GPG_PRIVATE_KEY and GPG_PASSPHRASE secrets for signing.
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Describe plugin
+        id: plugin_describe
+        run: echo "api_version=$(go run . describe | jq -r '.api_version')" >> $GITHUB_OUTPUT
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean --timeout 120m
+        env:
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_VERSION: ${{ steps.plugin_describe.outputs.api_version }}

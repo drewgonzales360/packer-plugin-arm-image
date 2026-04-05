@@ -3,50 +3,14 @@ version: 2
 project_name: packer-plugin-arm-image
 before:
   hooks:
-    - just test
-    - just ci-release-docs
+    - go test ./...
+    - go build -o packer-plugin-arm-image .
+    - go run github.com/hashicorp/packer-plugin-sdk/cmd/packer-sdc plugin-check packer-plugin-arm-image
+    - go run github.com/hashicorp/packer-plugin-sdk/cmd/packer-sdc renderdocs -src docs-src -partials docs-partials/ -dst docs/
+    - /bin/sh -c "[ -d docs ] && zip -r docs.zip docs/"
 builds:
-  # A separated build to run the packer-plugins-check only once for a linux_amd64 binary
   -
-    id: plugin-check
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    env:
-      - CGO_ENABLED=0
-    hooks:
-      post:
-        - cmd: |
-            just plugin-check
-    flags:
-      - -trimpath
-    ldflags:
-      - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
-    goos:
-      - linux
-    goarch:
-      - amd64
-    binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
-  -
-    id: packer-plugin-arm-image-linux
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    env:
-      - CGO_ENABLED=0
-    flags:
-      - -trimpath
-    ldflags:
-      - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - '386'
-      - arm
-      - arm64
-    ignore:
-      - goos: linux
-        goarch: amd64
-    binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
-  -
-    id: packer-plugin-arm-image-darwin
+    id: packer-plugin-arm-image
     mod_timestamp: '{{ .CommitTimestamp }}'
     flags:
       - -trimpath
@@ -55,39 +19,28 @@ builds:
     goos:
       - darwin
     goarch:
-      - amd64
       - arm64
     binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
-  -
-    id: flasher
-    main: ./cmd/flasher
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    env:
-      - CGO_ENABLED=0
-    flags:
-      - -trimpath
-    ldflags:
-      - '-s -w -X {{ .ModulePath }}/version.Version={{.Version}} -X {{ .ModulePath }}/version.VersionPrerelease= '
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - '386'
-      - arm
-      - arm64
-    binary: 'flasher_v{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 archives:
-- format: zip
-  files:
-    - none*
-  name_template: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
+  - formats: [zip]
+    files:
+      - none*
+    name_template: '{{ .ProjectName }}_v{{ .Version }}_{{ .Env.API_VERSION }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   name_template: '{{ .ProjectName }}_v{{ .Version }}_SHA256SUMS'
   algorithm: sha256
-
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
 release:
   extra_files:
-  - glob: ./docs.zip
-
+    - glob: ./docs.zip
 changelog:
   disable: true
