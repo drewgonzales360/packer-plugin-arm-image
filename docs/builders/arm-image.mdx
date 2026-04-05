@@ -116,15 +116,17 @@ a [communicator](/docs/templates/legacy_json_templates/communicator) can be conf
   is set to 384MB the last partition will be extended with an additional 128MB.
 
 - `qemu_binary` (string) - Qemu binary to use. default is determined based on `image_arch`.
-  If this is an absolute path, it will be used. Otherwise, we will look for one in your PATH
-  and finally, try to auto fetch one from https://github.com/multiarch/qemu-user-static/
-
-- `disable_embedded` (bool) - Do not use embedded qemu.
+  Must be installed on the host (e.g. via apt install qemu-user-static).
 
 - `qemu_args` ([]string) - Arguments to qemu binary. default depends on the image type. see init() function above.
 
 - `qemu_required` (bool) - Use qemu even when the build machine's CPU architecture matches the image's CPU architecture.
   Defaults to true if non-default `qemu_binary` or `qemu_args` are supplied.
+
+- `podman_image` (string) - Container image for the Podman build environment. On non-Linux hosts
+  (e.g. macOS), a privileged Podman container provides the Linux kernel
+  features needed for losetup, mount, and chroot. Defaults to "ubuntu:26.04".
+  Requires: podman machine init --rootful && podman machine start
 
 <!-- End of code generated from the comments of the Config struct in pkg/builder/config.go; -->
 
